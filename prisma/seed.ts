@@ -6,38 +6,55 @@ const prisma = new PrismaClient();
 async function main() {
   const password = await bcrypt.hash('password123', 10);
 
-  const faskes = await prisma.faskes.create({
-    data: {
-      name: 'Puskesmas Contoh',
-      type: 'PUSKESMAS',
-      address: 'Jl. Contoh No. 1',
-      city: 'Pekanbaru',
-      latitude: 0.5071,
-      longitude: 101.4478,
-      polis: { create: [{ name: 'Poli Umum' }, { name: 'Poli Gigi' }] },
-    },
-    include: { polis: true },
+  const faskes =
+    (await prisma.faskes.findFirst({ where: { name: 'Puskesmas Contoh' } })) ??
+    (await prisma.faskes.create({
+      data: {
+        name: 'Puskesmas Contoh',
+        type: 'PUSKESMAS',
+        address: 'Jl. Contoh No. 1',
+        city: 'Pekanbaru',
+        latitude: 0.5071,
+        longitude: 101.4478,
+      },
+    }));
+
+  const poliUmum = await prisma.poli.upsert({
+    where: { faskesId_name: { faskesId: faskes.id, name: 'Poli Umum' } },
+    update: {},
+    create: { faskesId: faskes.id, name: 'Poli Umum' },
+  });
+  await prisma.poli.upsert({
+    where: { faskesId_name: { faskesId: faskes.id, name: 'Poli Gigi' } },
+    update: {},
+    create: { faskesId: faskes.id, name: 'Poli Gigi' },
   });
 
-  await prisma.user.create({
-    data: { name: 'Admin', email: 'admin@ranah.test', password, role: 'ADMIN' },
+  const upsertUser = (name: string, email: string, role: 'ADMIN' | 'DOKTER' | 'RESEPSIONIS') =>
+    prisma.user.upsert({ where: { email }, update: {}, create: { name, email, password, role } });
+
+  await upsertUser('Admin', 'admin@ranah.test', 'ADMIN');
+  const dokter = await upsertUser('dr. Budi', 'dokter@ranah.test', 'DOKTER');
+  const resep = await upsertUser('Siti Resepsionis', 'resepsionis@ranah.test', 'RESEPSIONIS');
+
+  // Dokter selalu di Poli Umum, resepsionis di faskes yang sama
+  await prisma.doctorProfile.upsert({
+    where: { userId: dokter.id },
+    update: { faskesId: faskes.id, poliId: poliUmum.id },
+    create: { userId: dokter.id, faskesId: faskes.id, poliId: poliUmum.id },
+  });
+  await prisma.staffProfile.upsert({
+    where: { userId: resep.id },
+    update: { faskesId: faskes.id },
+    create: { userId: resep.id, faskesId: faskes.id },
   });
 
-  await prisma.user.create({
-    data: {
-      name: 'dr. Budi', email: 'dokter@ranah.test', password, role: 'DOKTER',
-      doctorProfile: { create: { faskesId: faskes.id, poliId: faskes.polis[0].id } },
-    },
-  });
-
-  await prisma.user.create({
-    data: {
-      name: 'Siti Resepsionis', email: 'resepsionis@ranah.test', password, role: 'RESEPSIONIS',
-      staffProfile: { create: { faskesId: faskes.id } },
-    },
-  });
-
-  console.log('✅ Seed selesai (password semua akun: password123)');
+  console.log('Seed selesai (password semua akun: password123)');
 }
 
-main().finally(() => prisma.$disconnect());
+main()
+  .catch((e) => {
+    console.error(e);
+    process.exit(1);
+  })
+  .finally(() => prisma.$disconnect());
