@@ -7,6 +7,8 @@ const envSchema = z.object({
   DATABASE_URL: z.string().min(1, 'DATABASE_URL wajib diisi'),
   JWT_SECRET: z.string().min(16, 'JWT_SECRET minimal 16 karakter'),
   JWT_EXPIRES_IN: z.string().default('7d'),
+  GEMINI_API_KEY: z.string().min(1, 'GEMINI_API_KEY wajib diisi'),
+  GEMINI_MODEL: z.string().default('gemini-3.5-flash'),
 });
 
 const parsed = envSchema.safeParse(process.env);
