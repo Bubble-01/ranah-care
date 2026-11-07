@@ -1,0 +1,208 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// ============ ENUMS ============
+enum Role {
+  ADMIN
+  PASIEN
+  DOKTER
+}
+
+enum FaskesType {
+  PUSKESMAS
+  RUMAH_SAKIT
+  KLINIK
+}
+
+enum ChatSender {
+  USER
+  AI
+}
+
+enum QueueStatus {
+  BOOKED          
+  CHECKED_IN      
+  CALLED          
+  IN_CONSULTATION 
+  DONE
+  CANCELLED
+  NO_SHOW
+}
+
+// ============ USER ============
+model User {
+  id        String   @id @default(uuid())
+  name      String
+  email     String   @unique
+  phone     String?
+  password  String
+  role      Role     @default(PASIEN)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Pasien
+  chatSessions   ChatSession[]
+  queues         Queue[]         @relation("PatientQueues")
+  medicalRecords MedicalRecord[] @relation("PatientRecords")
+
+  // Dokter
+  doctorProfile  DoctorProfile?
+  writtenRecords MedicalRecord[] @relation("DoctorRecords")
+
+  // Resepsionis
+  staffProfile   StaffProfile?
+
+  @@map("users")
+}
+
+// ============ FASKES & POLI ============
+model Faskes {
+  id        String     @id @default(uuid())
+  name      String
+  type      FaskesType
+  address   String     @db.Text
+  city      String
+  latitude  Decimal    @db.Decimal(10, 7)
+  longitude Decimal    @db.Decimal(10, 7)
+  phone     String?
+  isActive  Boolean    @default(true)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  polis         Poli[]
+  doctors       DoctorProfile[]
+  staff         StaffProfile[]
+  queues        Queue[]
+
+  @@index([city])
+  @@map("faskes")
+}
+
+model Poli {
+  id        String   @id @default(uuid())
+  faskesId  String
+  name      String  
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  faskes  Faskes          @relation(fields: [faskesId], references: [id], onDelete: Cascade)
+  doctors DoctorProfile[]
+  queues  Queue[]
+
+  @@unique([faskesId, name])
+  @@map("poli")
+}
+
+// ============ PROFIL STAF ============
+model DoctorProfile {
+  id             String  @id @default(uuid())
+  userId         String  @unique
+  faskesId       String
+  poliId         String
+  specialization String?
+  strNumber      String? // Surat Tanda Registrasi
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  faskes Faskes @relation(fields: [faskesId], references: [id])
+  poli   Poli   @relation(fields: [poliId], references: [id])
+
+  @@map("doctor_profiles")
+}
+
+model StaffProfile {
+  id       String @id @default(uuid())
+  userId   String @unique
+  faskesId String
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  faskes Faskes @relation(fields: [faskesId], references: [id])
+
+  @@map("staff_profiles")
+}
+
+// ============ CHAT AI (Chat_History) ============
+model ChatSession {
+  id        String   @id @default(uuid())
+  patientId String
+  title     String?
+  summary   String?  @db.Text
+  urgency   String?  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  patient  User          @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  messages ChatMessage[]
+  queues   Queue[]
+
+  @@index([patientId])
+  @@map("chat_sessions")
+}
+
+model ChatMessage {
+  id        String     @id @default(uuid())
+  sessionId String
+  sender    ChatSender
+  content   String     @db.Text
+  createdAt DateTime   @default(now())
+
+  session ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId, createdAt])
+  @@map("chat_messages")
+}
+
+// ============ ANTREAN ============
+model Queue {
+  id            String      @id @default(uuid())
+  patientId     String
+  faskesId      String
+  poliId        String
+  chatSessionId String?     // link ke chat AI → dibaca dokter
+  queueDate     DateTime    @db.Date
+  queueNumber   Int         // nomor dibuat saat booking, tidak ambil nomor baru di lokasi
+  status        QueueStatus @default(BOOKED)
+  complaint     String?     @db.Text
+  checkedInAt   DateTime?
+  calledAt      DateTime?
+  finishedAt    DateTime?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  patient     User         @relation("PatientQueues", fields: [patientId], references: [id])
+  faskes      Faskes       @relation(fields: [faskesId], references: [id])
+  poli        Poli         @relation(fields: [poliId], references: [id])
+  chatSession ChatSession? @relation(fields: [chatSessionId], references: [id])
+  record      MedicalRecord?
+
+  @@unique([poliId, queueDate, queueNumber])
+  @@index([faskesId, queueDate, status])
+  @@map("queues")
+}
+
+// ============ REKAM MEDIS ============
+model MedicalRecord {
+  id            String   @id @default(uuid())
+  queueId       String   @unique
+  patientId     String
+  doctorId      String
+  physicalExam  String?  @db.Text
+  diagnosis     String   @db.Text
+  prescription  String?  @db.Text
+  notes         String?  @db.Text
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  queue   Queue @relation(fields: [queueId], references: [id])
+  patient User  @relation("PatientRecords", fields: [patientId], references: [id])
+  doctor  User  @relation("DoctorRecords", fields: [doctorId], references: [id])
+
+  @@index([patientId])
+  @@map("medical_records")
+}
