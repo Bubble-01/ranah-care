@@ -9,12 +9,14 @@ const envSchema = z.object({
   JWT_EXPIRES_IN: z.string().default('7d'),
   GEMINI_API_KEY: z.string().min(1, 'GEMINI_API_KEY wajib diisi'),
   GEMINI_MODEL: z.string().default('gemini-3.5-flash'),
+  GEMINI_FALLBACK_MODEL: z.string().default('gemini-3.5-flash'),
 });
 
 const parsed = envSchema.safeParse(process.env);
 
 if (!parsed.success) {
-  console.error('❌ Konfigurasi .env tidak valid:', z.flattenError(parsed.error).fieldErrors);
+  console.error('Konfigurasi .env tidak valid:', z.flattenError(parsed.error).fieldErrors);
   process.exit(1);
 }
+
 export const env = parsed.data;

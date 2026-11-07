@@ -6,10 +6,10 @@ import { prisma } from './lib/prisma';
 async function bootstrap() {
   try {
     await prisma.$connect();
-    logger.info('✅ Terhubung ke database MySQL (XAMPP)');
+    logger.info(' Terhubung ke database MySQL (XAMPP)');
 
     const server = app.listen(env.PORT, () => {
-      logger.info(`🚀 Server berjalan di http://localhost:${env.PORT}/api/v1`);
+      logger.info(` Server berjalan di http://localhost:${env.PORT}/api/v1`);
     });
 
     const shutdown = async (signal: string) => {
@@ -24,7 +24,7 @@ async function bootstrap() {
     process.on('SIGINT', () => shutdown('SIGINT'));
     process.on('SIGTERM', () => shutdown('SIGTERM'));
   } catch (error) {
-    logger.fatal(error, '❌ Gagal terhubung ke database. Pastikan MySQL di XAMPP sudah Start.');
+    logger.fatal(error, ' Gagal terhubung ke database. Pastikan MySQL di XAMPP sudah Start.');
     process.exit(1);
   }
 }
